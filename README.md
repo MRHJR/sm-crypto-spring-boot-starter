@@ -105,18 +105,16 @@ sm-crypto:
 
 `key-1` 是可自定义的密钥 ID，改名时两处都要改。每次双击会生成不同的私钥，正常只生成一次。YAML 留在本机或服务器，不提交 Git、不打进 JAR。启动后访问 `GET /crypto/public-key`，应看到 `kid` 和自动推导的 `publicKey`，不会返回私钥。
 
-## 浏览器接入
+## 前端接入（Axios + 统一 request.js）
 
-前端源码与测试在 [frontend](frontend)。普通 GET 等请求和白名单内的明文 POST 继续用原有客户端；其他 POST 用此 SDK，不要遇到失败就回退到明文。使用打包器加载 SDK：
+前端不用逐个登记加密接口，也不用改业务页面里的加解密代码。把
+[`frontend/client.js`](frontend/client.js) 和
+[`frontend/examples/request.js`](frontend/examples/request.js) 接到现有项目的统一请求入口。
+开启后，**除免加密白名单以外的 POST 默认走 SDK**；白名单里的 POST 和其他 HTTP 方法继续走原 Axios。
 
-```js
-import { createCryptoClient } from './frontend/client.js';
-
-const cryptoClient = createCryptoClient({ origin: window.location.origin });
-const { status, ok, data } = await cryptoClient.post('/api/echo', { message: '你好' });
-```
-
-SDK 经 HTTPS 取 SM2 公钥、短期缓存，每次请求再从客户端安全随机源生成两把 SM4 密钥。前端不持有长期 SM4 密钥或 SM2 私钥，不自动重试业务请求。在网关或容器错误、鉴权拦截及协议校验失败等未进入加密响应流程的场景，SDK 将响应视为协议失败，而不是可信的业务 JSON。
+完整接入代码、依赖安装、Token 和 Cookie 传递方式见 [前端接入指南](frontend/README.md)。
+浏览器会自动取 SM2 公钥并临时生成 SM4 请求密钥和响应密钥，不用写死公钥，不配置私钥。
+遇到加解密失败时，不要降级成明文重发，也不要自动重试提交。
 
 ## 线上格式 v1
 
@@ -153,6 +151,6 @@ npm --prefix frontend test
 | 2.6.3 | 8 | 36 项通过 |
 | 3.5.16 | 17、21 | 每版 37 项通过 |
 
-前端 5 项单元测试通过。Boot 2 和 Boot 3 都跑过 Java 服务与 JavaScript 客户端的真实 HTTP 联调，覆盖双向加解密、篡改拒绝、防重放、加密返回 HTTP 422 业务错误，以及默认 POST 拒绝明文、精确和前缀白名单 POST 放行、相似前缀不误放行、普通 GET 不受影响。Boot 3 的实测框架版本是 3.5.16，不代表已经验证所有 3.x 小版本。
+前端 SDK 和统一请求入口示例共有 11 项单元测试。Boot 2 和 Boot 3 都跑过 Java 服务与 JavaScript 客户端的真实 HTTP 联调，覆盖双向加解密、篡改拒绝、防重放、加密返回 HTTP 422 业务错误，以及默认 POST 拒绝明文、精确和前缀白名单 POST 放行、相似前缀不误放行、普通 GET 不受影响。Boot 3 的实测框架版本是 3.5.16，不代表已经验证所有 3.x 小版本。
 
 Boot 3 模块通过 Maven 从同一份 Java 源码生成 Jakarta Servlet 版本，并使用自己的自动配置注册文件。`boot3/target` 是生成目录；修改通用协议、过滤器和测试时请改仓库根目录的源码，不要修改这个生成目录。
