@@ -50,7 +50,7 @@ sm-crypto:
   enabled: true
   active-kid: key-1
   private-keys:
-    key-1: ${SM_CRYPTO_KEY_1}
+    key-1: "替换成生成的 SM2 私钥"
   exclude-paths:
     - /api/public/search
     - /api/files/upload
@@ -67,7 +67,7 @@ sm-crypto:
 |---|---|
 | `enabled: true` | 总开关，默认 `false`。设为 `true` 后，除免加密白名单之外，经过 Starter 的 POST 接口默认要求加密 JSON。其他 HTTP 方法不参与加解密。关闭时，显式标了 `@EncryptedApi` 的 POST 仍不会降级为明文。 |
 | `active-kid: key-1` | 当前对前端发布的 SM2 密钥 ID，不是公钥或私钥内容。必须与 `private-keys` 中的某个条目名一致。前端通过公钥接口拿到这个 ID 和对应的公钥，并在加密请求中带上 ID。 |
-| `private-keys` | 后端的私钥表，格式是 `密钥 ID: SM2 私钥`。示例中的 `key-1: ${SM_CRYPTO_KEY_1}` 从环境变量读取 `key-1` 的私钥；值是 32 字节 SM2 私钥标量的无填充 Base64URL 编码，不是 PEM。后端从私钥推导公钥，私钥永远不会下发。换钥时可暂留旧条目处理在途请求。 |
+| `private-keys` | 后端的私钥表，格式是 `密钥 ID: SM2 私钥`。`key-1` 是 ID，右边直接填写生成的私钥；值是 32 字节 SM2 私钥标量的无填充 Base64URL 编码，不是 PEM。后端从私钥推导公钥，私钥永远不会下发。换钥时可暂留旧条目处理在途请求。 |
 | `exclude-paths` | 免加密的 POST 白名单，默认空。按完整请求路径精确匹配，包含 context path，不填查询参数，不支持通配符。例如 `/api/files/upload` 命中后，该接口沿用原方式处理请求和响应，不影响鉴权。 |
 | `clock-skew: 2m` | 客户端请求时间戳与服务器时间允许相差的最大值，默认前后各 2 分钟。比服务器时间早或晚超过 2 分钟都拒绝，允许范围为 `1ms` 到 `15m`。它不是 HTTP 请求超时时间。 |
 | `max-body-bytes: 1048576` | 体积限制，单位是字节，默认 1 MiB，可配 1 KiB 至 8 MiB。请求侧限制的是收到的整个加密 JSON 信封；响应侧限制的是加密前的响应体。请求侧因 Base64URL 和报文开销，可用的明文 JSON 小于 1 MiB。 |
@@ -84,50 +84,23 @@ sm-crypto:
 
 ### SM2 私钥配置示例
 
-**可以自己取密钥 ID，不能把随手输入的字符串当私钥。** 例如 `key-1` 可改成 `dev-2026`，只要 `active-kid` 和 `private-keys` 的条目名一致。ID 长度为 1–64 个字符，只能用英文字母、数字、下划线和短横线；它是公开的标签，不是秘密。
+**1. 生成私钥。** 如果电脑装了 Python 3，在 Windows PowerShell 运行下面这一行，复制它输出的 43 个字符。Linux / macOS 把开头的 `py -3` 换成 `python3` 即可。
 
-下面是本地开发示例，需要 Python 3。正式环境请从可信的密钥管理流程生成并注入私钥，不要在每次启动时重新生成。
-
-**1. 在本机生成私钥。** 将下面内容保存为本地 `generate_sm2_key.py`。它使用系统安全随机源生成合法的 SM2 私钥标量，输出为 32 字节大端、无填充 Base64URL（43 个字符）。不要用密码、UUID、公钥、十六进制串或整段 PEM 代替。
-
-```python
-import base64
-import secrets
-
-# SM2 曲线的阶；这不是密钥。
-n = int("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123", 16)
-d = secrets.randbelow(n - 1) + 1
-raw = d.to_bytes(32, "big")
-print(base64.urlsafe_b64encode(raw).decode("ascii").rstrip("="))
+```powershell
+py -3 -c "import base64,secrets;n=0xFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123;print(base64.urlsafe_b64encode((secrets.randbelow(n-1)+1).to_bytes(32,'big')).decode().rstrip('='))"
 ```
 
-**2. 在 `application.yml` 引用环境变量。** 文件里只保存占位符，不保存真实值：
+**2. 直接填到本机的 YAML。** 把输出粘到 `private-keys.key-1`，保留引号，然后重启业务应用：
 
 ```yaml
 sm-crypto:
   enabled: true
-  active-kid: dev-2026
+  active-kid: key-1
   private-keys:
-    dev-2026: "${SM_CRYPTO_KEY_1}"
+    key-1: "替换成上面生成的私钥"
 ```
 
-**3. 注入环境变量，再从同一个终端启动你的业务应用。** 以下示例会把生成结果直接赋给变量，不在终端显示私钥。`your-app.jar` 是引入 Starter 的业务 JAR，不是 Starter 自身：
-
-Windows PowerShell：
-
-```powershell
-$env:SM_CRYPTO_KEY_1 = (py -3 .\generate_sm2_key.py)
-java -jar .\your-app.jar
-```
-
-Linux / macOS：
-
-```bash
-export SM_CRYPTO_KEY_1="$(python3 ./generate_sm2_key.py)"
-java -jar ./your-app.jar
-```
-
-如果从 IDE 启动，在该应用的运行配置中设置同名环境变量，不要把含真实私钥的运行配置提交进仓库。启动后访问 `GET /crypto/public-key`，应看到 `kid` 为 `dev-2026` 和对应的 `publicKey`，不会看到私钥。**不要提交、截图或转发私钥。**
+`key-1` 是可以自定义的名字，改名时两处都要改。私钥只生成一次，不要用随手输入的字符串代替，也不要每次启动都重新生成。配置文件留在本机或服务器，不提交 Git、不打进 JAR。启动后访问 `GET /crypto/public-key`，应看到 `kid` 和自动生成的 `publicKey`，不会返回私钥。
 
 ## 浏览器接入
 
