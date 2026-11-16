@@ -82,6 +82,53 @@ sm-crypto:
 
 内置去重存储只适合单实例。上线多实例之前提供共享的 `ReplayStore` 实现，在整个窗口内对 ID 做原子占用；同时保留业务自己的幂等键和生产限流。切换 `active-kid` 时，为旧请求保留旧私钥到公钥缓存和在途请求窗口结束。若网关能替换前端代码、公钥或窃取明文登录凭据，不要把这套协议当成对该网关的完整防护。协议不提供应用层前向保密，长期 SM2 私钥泄露时，之前截获的密文可能被解开。
 
+### SM2 私钥配置示例
+
+**可以自己取密钥 ID，不能把随手输入的字符串当私钥。** 例如 `key-1` 可改成 `dev-2026`，只要 `active-kid` 和 `private-keys` 的条目名一致。ID 长度为 1–64 个字符，只能用英文字母、数字、下划线和短横线；它是公开的标签，不是秘密。
+
+下面是本地开发示例，需要 Python 3。正式环境请从可信的密钥管理流程生成并注入私钥，不要在每次启动时重新生成。
+
+**1. 在本机生成私钥。** 将下面内容保存为本地 `generate_sm2_key.py`。它使用系统安全随机源生成合法的 SM2 私钥标量，输出为 32 字节大端、无填充 Base64URL（43 个字符）。不要用密码、UUID、公钥、十六进制串或整段 PEM 代替。
+
+```python
+import base64
+import secrets
+
+# SM2 曲线的阶；这不是密钥。
+n = int("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123", 16)
+d = secrets.randbelow(n - 1) + 1
+raw = d.to_bytes(32, "big")
+print(base64.urlsafe_b64encode(raw).decode("ascii").rstrip("="))
+```
+
+**2. 在 `application.yml` 引用环境变量。** 文件里只保存占位符，不保存真实值：
+
+```yaml
+sm-crypto:
+  enabled: true
+  active-kid: dev-2026
+  private-keys:
+    dev-2026: "${SM_CRYPTO_KEY_1}"
+```
+
+**3. 注入环境变量，再从同一个终端启动你的业务应用。** 以下示例会把生成结果直接赋给变量，不在终端显示私钥。`your-app.jar` 是引入 Starter 的业务 JAR，不是 Starter 自身：
+
+Windows PowerShell：
+
+```powershell
+$env:SM_CRYPTO_KEY_1 = (py -3 .\generate_sm2_key.py)
+java -jar .\your-app.jar
+```
+
+Linux / macOS：
+
+```bash
+export SM_CRYPTO_KEY_1="$(python3 ./generate_sm2_key.py)"
+java -jar ./your-app.jar
+```
+
+如果从 IDE 启动，在该应用的运行配置中设置同名环境变量，不要把含真实私钥的运行配置提交进仓库。启动后访问 `GET /crypto/public-key`，应看到 `kid` 为 `dev-2026` 和对应的 `publicKey`，不会看到私钥。**不要提交、截图或转发私钥。**
+
 ## 浏览器接入
 
 前端源码与测试在 [frontend](frontend)。普通 GET 等请求和白名单内的明文 POST 继续用原有客户端；其他 POST 用此 SDK，不要遇到失败就回退到明文。使用打包器加载 SDK：
