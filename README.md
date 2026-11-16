@@ -84,23 +84,19 @@ sm-crypto:
 
 ### SM2 私钥配置示例
 
-**1. 生成私钥。** 如果电脑装了 Python 3，在 Windows PowerShell 运行下面这一行，复制它输出的 43 个字符。Linux / macOS 把开头的 `py -3` 换成 `python3` 即可。
+**1. 下载并双击 [generate-sm2-key.cmd](scripts/generate-sm2-key.cmd)。** 在 GitHub 文件页下载原始文件，保存后双击。脚本使用 Windows 自带的 PowerShell，不用安装 Python，也不用先启动 JAR。窗口会显示一行 43 个字符的私钥并停住，复制这一行即可；脚本不会写文件或上传私钥。
 
-```powershell
-py -3 -c "import base64,secrets;n=0xFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123;print(base64.urlsafe_b64encode((secrets.randbelow(n-1)+1).to_bytes(32,'big')).decode().rstrip('='))"
-```
-
-**2. 直接填到本机的 YAML。** 把输出粘到 `private-keys.key-1`，保留引号，然后重启业务应用：
+**2. 把复制的私钥填到本机 YAML** 的 `private-keys.key-1`，保留引号，然后重启业务应用：
 
 ```yaml
 sm-crypto:
   enabled: true
   active-kid: key-1
   private-keys:
-    key-1: "替换成上面生成的私钥"
+    key-1: "替换成刚刚复制的私钥"
 ```
 
-`key-1` 是可以自定义的名字，改名时两处都要改。私钥只生成一次，不要用随手输入的字符串代替，也不要每次启动都重新生成。配置文件留在本机或服务器，不提交 Git、不打进 JAR。启动后访问 `GET /crypto/public-key`，应看到 `kid` 和自动生成的 `publicKey`，不会返回私钥。
+`key-1` 是可自定义的密钥 ID，改名时两处都要改。每次双击会生成不同的私钥，正常只生成一次。YAML 留在本机或服务器，不提交 Git、不打进 JAR。启动后访问 `GET /crypto/public-key`，应看到 `kid` 和自动推导的 `publicKey`，不会返回私钥。
 
 ## 浏览器接入
 
