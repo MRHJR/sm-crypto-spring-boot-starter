@@ -59,6 +59,20 @@ sm-crypto:
   replay-capacity: 10000
 ```
 
+### 配置项说明
+
+下表适用于 Boot 2 和 Boot 3，配置项都写在 `sm-crypto:` 下。
+
+| 配置项 | 含义 |
+|---|---|
+| `enabled: true` | 总开关，默认 `false`。设为 `true` 后，除免加密白名单之外，经过 Starter 的 POST 接口默认要求加密 JSON。其他 HTTP 方法不参与加解密。关闭时，显式标了 `@EncryptedApi` 的 POST 仍不会降级为明文。 |
+| `active-kid: key-1` | 当前对前端发布的 SM2 密钥 ID，不是公钥或私钥内容。必须与 `private-keys` 中的某个条目名一致。前端通过公钥接口拿到这个 ID 和对应的公钥，并在加密请求中带上 ID。 |
+| `private-keys` | 后端的私钥表，格式是 `密钥 ID: SM2 私钥`。示例中的 `key-1: ${SM_CRYPTO_KEY_1}` 从环境变量读取 `key-1` 的私钥；值是 32 字节 SM2 私钥标量的无填充 Base64URL 编码，不是 PEM。后端从私钥推导公钥，私钥永远不会下发。换钥时可暂留旧条目处理在途请求。 |
+| `exclude-paths` | 免加密的 POST 白名单，默认空。按完整请求路径精确匹配，包含 context path，不填查询参数，不支持通配符。例如 `/api/files/upload` 命中后，该接口沿用原方式处理请求和响应，不影响鉴权。 |
+| `clock-skew: 2m` | 客户端请求时间戳与服务器时间允许相差的最大值，默认前后各 2 分钟。比服务器时间早或晚超过 2 分钟都拒绝，允许范围为 `1ms` 到 `15m`。它不是 HTTP 请求超时时间。 |
+| `max-body-bytes: 1048576` | 体积限制，单位是字节，默认 1 MiB，可配 1 KiB 至 8 MiB。请求侧限制的是收到的整个加密 JSON 信封；响应侧限制的是加密前的响应体。请求侧因 Base64URL 和报文开销，可用的明文 JSON 小于 1 MiB。 |
+| `replay-capacity: 10000` | 单实例内置防重放缓存最多同时保留多少个已接受、尚未过期的请求 ID，默认 10,000，可配 1 到 1,000,000。重复 ID 会被拒绝；缓存满时不会提前淘汰未过期 ID，而是拒绝新请求。多实例应使用共享 `ReplayStore`，容量由该实现管理。 |
+
 `enabled` 和白名单在启动时读取，改配置后须重启。受保护的 Controller 仍然收发普通 JSON DTO，默认请求上限是整个加密信封的 1 MiB；因 Base64URL 和信封开销，可用 JSON 体积会更小。前端取公钥不携带登录凭据，宿主的 Spring Security 应允许访问准确的 `GET /crypto/public-key`，不要因此放行业务接口。有 context path 或 MVC 路径前缀时，在 SDK 的 `publicKeyPath` 填写完整公钥路径。若请求在更早的安全过滤器里就已处理，不会进入 Starter。
 
 - **升级 0.1.0 → 0.2.0**：删除旧的 `sm-crypto.paths` 配置，再明确列出仍需走明文的 POST；启用时若仍配置旧项，应用会提示迁移而不是静默扩大范围。上线前确认所有应加密的 POST 调用方已接入 SDK。
