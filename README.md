@@ -4,23 +4,34 @@
 
 ## 下载和安装
 
-在 [dist](dist) 选择与运行 JDK 匹配的 JAR：`jdk8`、`jdk11`、`jdk17` 或 `jdk21`，可用 `SHA256SUMS` 校验文件。JAR 是普通 Maven 依赖，不是独立应用；依赖由宿主 Maven 项目解析。每个文件按对应 JDK 编译，不只是改文件名。
+先按宿主项目的 **Spring Boot 大版本**选 Starter，再按运行 **JDK** 选 JAR。两种 Starter 不要同时引入。同一个 Starter 的不同 JDK 构建共享 Maven 坐标，只安装与你运行时匹配的一个。
 
-如使用 Maven，可下载仓库根目录的 `pom.xml`，将选好的 JAR 安装到本地仓库（以下以 JDK 17 为例）：
+| 宿主 Spring Boot | 可下载 JDK | 下载 | Maven artifactId |
+|---|---|---|---|
+| 2.x / Servlet MVC（javax） | 8、11、17、21 | [Boot 2 JAR](dist) | `sm-crypto-spring-boot-starter` |
+| 3.x / Servlet MVC（jakarta） | 17、21 | [Boot 3 JAR](dist/boot3) | `sm-crypto-spring-boot3-starter` |
+
+各目录的 `SHA256SUMS` 可用于校验。它们是普通 Maven 依赖，不是独立应用。下面以 **JDK 17** 为例，先下载并安装需要的那一个：
 
 ```sh
+# Spring Boot 2 项目：
 mvn install:install-file -Dfile=dist/sm-crypto-spring-boot-starter-0.1.0-jdk17.jar -DpomFile=pom.xml
+
+# Spring Boot 3 项目：
+mvn install:install-file -Dfile=dist/boot3/sm-crypto-spring-boot3-starter-0.1.0-jdk17.jar -DpomFile=boot3/pom.xml
 ```
+
+在宿主项目中使用相应的 artifactId。例如 Boot 3：
 
 ```xml
 <dependency>
   <groupId>io.github.mrhjr</groupId>
-  <artifactId>sm-crypto-spring-boot-starter</artifactId>
+  <artifactId>sm-crypto-spring-boot3-starter</artifactId>
   <version>0.1.0</version>
 </dependency>
 ```
 
-本版本目标为 **Spring Boot 2.x / Servlet MVC（javax）**，版本矩阵以 Boot 2.7.18 为基准。它不兼容 Boot 3.x / Jakarta，也不支持 WebFlux、流式响应、上传、异步 Controller 或加密 URL/请求头。Boot 2.x 为兼容旧项目；生产部署仍须单独确认宿主框架安全维护状态，不要为了使用这个 JAR 去降级。不同 JDK 构建用同一 Maven 坐标，本地安装时请只选一个。
+这两个版本均不支持 WebFlux、流式响应、上传、异步 Controller 或加密 URL/请求头。Boot 2 的包用于兼容旧项目；生产部署仍须确认宿主框架安全维护状态，不要为了使用这个 JAR 去降级。
 
 ## 后端接入
 
@@ -67,17 +78,20 @@ SDK 经 HTTPS 取 SM2 公钥、短期缓存，每次请求再从客户端安全�
 ## 构建
 
 ```sh
-mvn clean verify
+mvn clean verify  # Boot 2
+mvn -f boot3/pom.xml clean verify  # Boot 3（要求 JDK 17+）
 npm --prefix frontend ci
 npm --prefix frontend test
 # 设置 JDK8_HOME、JDK11_HOME、JDK17_HOME、JDK21_HOME 后：
 ./scripts/build-jdk-matrix.sh
+./scripts/build-boot3-matrix.sh
 ```
 
 运行实际的 Java↔JavaScript 往返测试（本地回环、启动 Java 服务、临时生成测试密钥）：
 
 ```sh
-./scripts/test-interop.sh
+./scripts/test-interop.sh boot2
+./scripts/test-interop.sh boot3
 ```
 
 ### 本次验证
@@ -86,5 +100,8 @@ npm --prefix frontend test
 |---|---|---|
 | 2.7.18 | 8、11、17、21 | 每版 27 项通过 |
 | 2.6.3 | 8 | 27 项通过 |
+| 3.5.16 | 17、21 | 每版 28 项通过 |
 
-前端 4 项单元测试通过。Java 服务与 JavaScript 客户端的真实 HTTP 联调已覆盖双向加解密、篡改拒绝、防重放，以及加密返回 HTTP 422 业务错误。
+前端 4 项单元测试通过。Boot 2 和 Boot 3 都跑过 Java 服务与 JavaScript 客户端的真实 HTTP 联调，覆盖双向加解密、篡改拒绝、防重放，以及加密返回 HTTP 422 业务错误。Boot 3 的实测框架版本是 3.5.16，不代表已经验证所有 3.x 小版本。
+
+Boot 3 模块通过 Maven 从同一份 Java 源码生成 Jakarta Servlet 版本，并使用自己的自动配置注册文件。`boot3/target` 是生成目录；修改通用协议、过滤器和测试时请改仓库根目录的源码，不要修改这个生成目录。

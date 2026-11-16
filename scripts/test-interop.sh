@@ -11,18 +11,26 @@ repo_args=()
 if [[ -n "${MAVEN_LOCAL_REPO:-}" ]]; then
   repo_args+=("-Dmaven.repo.local=${MAVEN_LOCAL_REPO}")
 fi
-"$mvn_cmd" "${repo_args[@]}" -B -ntp -DskipTests test-compile dependency:build-classpath \
-  -DincludeScope=test -Dmdep.outputFile=target/interop-classpath
+project=()
+output=target
+case "${1:-boot2}" in
+  boot2) ;;
+  boot3) project=(-f boot3/pom.xml); output=boot3/target ;;
+  *) echo "Usage: $0 [boot2|boot3]" >&2; exit 2 ;;
+esac
+"$mvn_cmd" "${repo_args[@]}" "${project[@]}" -B -ntp -DskipTests test-compile dependency:build-classpath \
+  -DincludeScope=test "-Dmdep.outputFile=$PWD/$output/interop-classpath"
 key=$(node -e 'const c=require("node:crypto"); process.stdout.write(Buffer.concat([Buffer.from([1]),c.randomBytes(31)]).toString("base64url"));')
 # Bind only to loopback and use a one-off test key supplied through an environment variable.
-SM_CRYPTO_DEMO_KEY="$key" "$java_cmd" -cp "target/test-classes:target/classes:$(cat target/interop-classpath)" \
-  io.github.mrhjr.smcrypto.example.DemoApplication >target/interop-server.log 2>&1 &
+starter=${SM_CRYPTO_JAR:-$output/classes}
+SM_CRYPTO_DEMO_KEY="$key" "$java_cmd" -cp "$output/test-classes:$starter:$(cat "$output/interop-classpath")" \
+  io.github.mrhjr.smcrypto.example.DemoApplication >"$output/interop-server.log" 2>&1 &
 server=$!
 trap 'kill "$server" 2>/dev/null || true' EXIT
 origin=http://127.0.0.1:18080
 for _ in $(seq 1 40); do
   curl -fsS --noproxy 127.0.0.1 "$origin/crypto/public-key" >/dev/null 2>&1 && break
-  if ! kill -0 "$server" 2>/dev/null; then cat target/interop-server.log; exit 1; fi
+  if ! kill -0 "$server" 2>/dev/null; then cat "$output/interop-server.log"; exit 1; fi
   sleep 0.4
 done
 curl -fsS --noproxy 127.0.0.1 "$origin/crypto/public-key" >/dev/null
