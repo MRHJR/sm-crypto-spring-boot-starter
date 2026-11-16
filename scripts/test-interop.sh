@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+mvn_cmd=${MAVEN_BIN:-mvn}
+java_cmd=java
+if [[ -n "${JAVA_HOME:-}" ]]; then
+  java_cmd="$JAVA_HOME/bin/java"
+fi
+repo_args=()
+if [[ -n "${MAVEN_LOCAL_REPO:-}" ]]; then
+  repo_args+=("-Dmaven.repo.local=${MAVEN_LOCAL_REPO}")
+fi
+"$mvn_cmd" "${repo_args[@]}" -B -ntp -DskipTests test-compile dependency:build-classpath \
+  -DincludeScope=test -Dmdep.outputFile=target/interop-classpath
+key=$(node -e 'const c=require("node:crypto"); process.stdout.write(Buffer.concat([Buffer.from([1]),c.randomBytes(31)]).toString("base64url"));')
+# Bind only to loopback and use a one-off test key supplied through an environment variable.
+SM_CRYPTO_DEMO_KEY="$key" "$java_cmd" -cp "target/test-classes:target/classes:$(cat target/interop-classpath)" \
+  io.github.mrhjr.smcrypto.example.DemoApplication >target/interop-server.log 2>&1 &
+server=$!
+trap 'kill "$server" 2>/dev/null || true' EXIT
+origin=http://127.0.0.1:18080
+for _ in $(seq 1 40); do
+  curl -fsS --noproxy 127.0.0.1 "$origin/crypto/public-key" >/dev/null 2>&1 && break
+  if ! kill -0 "$server" 2>/dev/null; then cat target/interop-server.log; exit 1; fi
+  sleep 0.4
+done
+curl -fsS --noproxy 127.0.0.1 "$origin/crypto/public-key" >/dev/null
+env -u NODE_USE_ENV_PROXY NO_PROXY=127.0.0.1 npm --prefix frontend run interop -- "$origin" /demo/echo
+env -u NODE_USE_ENV_PROXY NO_PROXY=127.0.0.1 node --input-type=module <<'JS'
+import assert from 'node:assert/strict';
+import { createCryptoClient } from './frontend/client.js';
+
+const client = createCryptoClient({ origin: 'http://127.0.0.1:18080', allowInsecureLoopback: true });
+const body = { message: '验证加密业务错误' };
+assert.deepEqual(await client.post('/demo/reject', body), { status: 422, ok: false, data: body });
+console.log('Authenticated non-2xx business response: OK');
+JS

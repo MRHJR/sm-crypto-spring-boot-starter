@@ -1,0 +1,9 @@
+{
+  "name": "sm-crypto-browser-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./client.js",
+  "scripts": {"test": "node --test test/*.test.js", "interop": "node scripts/interop.js"},
+  "dependencies": {"sm-crypto-v2": "2.0.1"}
+}
