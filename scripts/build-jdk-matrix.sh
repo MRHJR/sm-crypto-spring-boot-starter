@@ -9,7 +9,7 @@ if [[ -n "${MAVEN_LOCAL_REPO:-}" ]]; then
 fi
 version=0.1.0
 artifact="sm-crypto-spring-boot-starter"
-mkdir -p dist
+mkdir -p dist/boot2
 for v in 8 11 17 21; do
   name="JDK${v}_HOME"
   jdk=${!name:-}
@@ -26,6 +26,6 @@ for v in 8 11 17 21; do
   printf '\n== JDK %s (%s) ==\n' "$v" "$compiler"
   JAVA_HOME="$jdk" PATH="$jdk/bin:$PATH" "$mvn_cmd" \
     "${repo_args[@]}" -B -ntp "-Dmaven.compiler.release=$v" clean verify
-  cp "target/$artifact-$version.jar" "dist/$artifact-$version-jdk$v.jar"
+  cp "target/$artifact-$version.jar" "dist/boot2/$artifact-$version-jdk$v.jar"
 done
-(cd dist && sha256sum "$artifact-$version"-jdk*.jar > SHA256SUMS)
+(cd dist/boot2 && sha256sum "$artifact-$version"-jdk*.jar > SHA256SUMS)

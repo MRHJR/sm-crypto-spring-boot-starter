@@ -8,14 +8,14 @@
 
 | 宿主 Spring Boot | 可下载 JDK | 下载 | Maven artifactId |
 |---|---|---|---|
-| 2.x / Servlet MVC（javax） | 8、11、17、21 | [Boot 2 JAR](dist) | `sm-crypto-spring-boot-starter` |
+| 2.x / Servlet MVC（javax） | 8、11、17、21 | [Boot 2 JAR](dist/boot2) | `sm-crypto-spring-boot-starter` |
 | 3.x / Servlet MVC（jakarta） | 17、21 | [Boot 3 JAR](dist/boot3) | `sm-crypto-spring-boot3-starter` |
 
 各目录的 `SHA256SUMS` 可用于校验。它们是普通 Maven 依赖，不是独立应用。下面以 **JDK 17** 为例，先下载并安装需要的那一个：
 
 ```sh
 # Spring Boot 2 项目：
-mvn install:install-file -Dfile=dist/sm-crypto-spring-boot-starter-0.1.0-jdk17.jar -DpomFile=pom.xml
+mvn install:install-file -Dfile=dist/boot2/sm-crypto-spring-boot-starter-0.1.0-jdk17.jar -DpomFile=pom.xml
 
 # Spring Boot 3 项目：
 mvn install:install-file -Dfile=dist/boot3/sm-crypto-spring-boot3-starter-0.1.0-jdk17.jar -DpomFile=boot3/pom.xml
