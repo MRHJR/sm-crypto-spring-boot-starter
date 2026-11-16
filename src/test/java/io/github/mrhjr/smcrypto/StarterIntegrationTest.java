@@ -76,6 +76,7 @@ class StarterIntegrationTest {
         r.add("sm-crypto.private-keys." + KID, () -> encode(SCALAR));
         r.add("sm-crypto.exclude-paths[0]", () -> "/plain");
         r.add("sm-crypto.exclude-paths[1]", () -> "/marked-excluded");
+        r.add("sm-crypto.exclude-paths[2]", () -> "/api/public/**");
         r.add("sm-crypto.max-body-bytes", () -> "4096");
     }
 
@@ -125,6 +126,17 @@ class StarterIntegrationTest {
                 .andExpect(status().isOk()).andReturn()).path("name").asText());
         mvc.perform(post("/plain/child").contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .content("name=not-encrypted")).andExpect(status().isBadRequest());
+    }
+
+    @Test void prefixExemptsCanonicalParentAndDescendantButNotSimilarPath() throws Exception {
+        send("/api/public", "{\"name\":\"parent\"}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("parent"));
+        send("/api/public/search", "{\"name\":\"child\"}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("child"));
+        send("/api/publicity", "{\"name\":\"protected\"}").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ENCRYPTED_REQUEST"));
+        send("/api/public/marked", "{\"name\":\"marked-excluded\"}").andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("ENCRYPTED_ENDPOINT_CONFIG_CONFLICT"));
     }
 
     @Test void nonPostMethodsAreUnaffectedEvenAtMarkedController() throws Exception {
@@ -304,7 +316,7 @@ class StarterIntegrationTest {
             return ResponseEntity.unprocessableEntity().body(java.util.Collections.singletonMap("code", "invalid-order"));
         }
 
-        @PostMapping({"/plain", "/plain/child"})
+        @PostMapping({"/plain", "/plain/child", "/api/public", "/api/public/search", "/api/publicity"})
         Map<String,String> plain(@RequestBody Map<String,String> body) { return body; }
     }
 
@@ -315,7 +327,7 @@ class StarterIntegrationTest {
         Map<String,String> get() { return java.util.Collections.singletonMap("name", "GET"); }
         @PutMapping("/marked-methods")
         Map<String,String> put() { return java.util.Collections.singletonMap("name", "PUT"); }
-        @PostMapping("/marked-excluded")
+        @PostMapping({"/marked-excluded", "/api/public/marked"})
         Map<String,String> excluded(@RequestBody Map<String,String> body) { return body; }
     }
 }

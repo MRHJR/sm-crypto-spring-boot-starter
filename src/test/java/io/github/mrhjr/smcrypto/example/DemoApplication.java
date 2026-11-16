@@ -28,6 +28,7 @@ public class DemoApplication {
         params.put("server.port", "18080");
         params.put("sm-crypto.enabled", true);
         params.put("sm-crypto.exclude-paths[0]", "/demo/plain");
+        params.put("sm-crypto.exclude-paths[1]", "/demo/public/**");
         params.put("sm-crypto.active-kid", "local-demo");
         params.put("sm-crypto.private-keys.local-demo", key);
         SpringApplication app = new SpringApplication(DemoApplication.class);
@@ -49,7 +50,7 @@ public class DemoApplication {
             return ResponseEntity.unprocessableEntity().body(body);
         }
 
-        @PostMapping("/demo/plain")
+        @PostMapping({"/demo/plain", "/demo/public/echo"})
         public Map<String, String> plain(@RequestBody Map<String, String> body) { return body; }
 
         @GetMapping("/demo/plain")

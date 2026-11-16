@@ -7,7 +7,7 @@ repo_args=()
 if [[ -n "${MAVEN_LOCAL_REPO:-}" ]]; then
   repo_args+=("-Dmaven.repo.local=${MAVEN_LOCAL_REPO}")
 fi
-version=0.2.0
+version=0.3.0
 artifact=sm-crypto-spring-boot3-starter
 mkdir -p dist/boot3
 for v in 17 21; do

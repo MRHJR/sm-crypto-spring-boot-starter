@@ -55,5 +55,10 @@ const ordinaryGet = await fetch(origin + '/demo/plain');
 assert.equal(ordinaryGet.status, 200);
 const getBody = await ordinaryGet.json();
 assert.ok(!('ciphertext' in getBody));
-console.log('Default POST protection, plaintext exemption, and unchanged GET: OK');
+const prefixPost = await fetch(origin + '/demo/public/echo', plaintextPost);
+assert.equal(prefixPost.status, 200);
+assert.deepEqual(await prefixPost.json(), body);
+const sameLetterPrefix = await fetch(origin + '/demo/publicity', plaintextPost);
+assert.equal(sameLetterPrefix.status, 400);
+console.log('Default POST protection, exact and prefix exemptions, boundary check, and unchanged GET: OK');
 JS
