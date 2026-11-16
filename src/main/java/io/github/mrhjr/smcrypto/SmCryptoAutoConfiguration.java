@@ -27,12 +27,17 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @ConditionalOnClass(DispatcherServlet.class)
 @EnableConfigurationProperties(CryptoProperties.class)
 public class SmCryptoAutoConfiguration {
-    // Keep the marker fail-closed even when the engine is disabled or the path was not configured.
     @Bean
-    WebMvcConfigurer smCryptoGuardConfigurer() {
+    PostPolicy smCryptoPostPolicy(CryptoProperties properties) {
+        return new PostPolicy(properties);
+    }
+
+    // Keep the marker fail-closed even when the engine is disabled.
+    @Bean
+    WebMvcConfigurer smCryptoGuardConfigurer(PostPolicy policy) {
         return new WebMvcConfigurer() {
             @Override public void addInterceptors(InterceptorRegistry registry) {
-                registry.addInterceptor(new EncryptedApiGuard()).order(Ordered.HIGHEST_PRECEDENCE);
+                registry.addInterceptor(new EncryptedApiGuard(policy)).order(Ordered.HIGHEST_PRECEDENCE);
             }
         };
     }
@@ -64,9 +69,9 @@ public class SmCryptoAutoConfiguration {
 
         @Bean
         FilterRegistrationBean<CryptoFilter> smCryptoFilterRegistration(CryptoProperties properties,
-                KeyRing keys, ReplayStore replayStore) {
+                PostPolicy policy, KeyRing keys, ReplayStore replayStore) {
             FilterRegistrationBean<CryptoFilter> filter =
-                    new FilterRegistrationBean<>(new CryptoFilter(properties, keys, replayStore));
+                    new FilterRegistrationBean<>(new CryptoFilter(properties, policy, keys, replayStore));
             filter.setName("smCryptoFilter");
             filter.setDispatcherTypes(EnumSet.of(DispatcherType.REQUEST));
             filter.setAsyncSupported(true);

@@ -31,7 +31,7 @@ try {
   `post(path, payload, { headers, signal })` 传已有认证头。如果跨源部署，
   另行配置 CORS，并明确选择凭证策略。
 - 路径用服务端实际收到的完整路径（含 context path），不能带查询串、片段、
-  重复斜线、尾斜线或路径转义。第一版只支持 POST JSON。
+  重复斜线、尾斜线或路径转义。只支持 POST JSON。后端 0.2.0 启用后，除免加密白名单外的 POST 都应使用此 SDK；白名单中的 POST 和非 POST 继续用原有客户端。
 - 只在本地测试服务器允许 `allowInsecureLoopback: true`；生产保留 HTTPS。
 - 不把真实对称密钥写入前端代码、本地存储或日志。受信任的公钥也不是客户端身份凭证。
 

@@ -18,7 +18,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(classes = Boot3AutoConfigurationTest.TestApp.class, properties = {
-        "sm-crypto.enabled=true", "sm-crypto.active-kid=boot3-smoke", "sm-crypto.paths[0]=/example/echo"
+        "sm-crypto.enabled=true", "sm-crypto.active-kid=boot3-smoke"
 })
 @AutoConfigureMockMvc
 class Boot3AutoConfigurationTest {

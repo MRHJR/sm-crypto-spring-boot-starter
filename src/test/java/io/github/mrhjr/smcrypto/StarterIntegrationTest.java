@@ -10,6 +10,10 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import javax.servlet.DispatcherType;
+import javax.servlet.RequestDispatcher;
+import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.bouncycastle.asn1.gm.GMNamedCurves;
 import org.bouncycastle.asn1.x9.X9ECParameters;
 import org.bouncycastle.crypto.engines.SM2Engine;
@@ -70,8 +74,8 @@ class StarterIntegrationTest {
         r.add("sm-crypto.enabled", () -> "true");
         r.add("sm-crypto.active-kid", () -> KID);
         r.add("sm-crypto.private-keys." + KID, () -> encode(SCALAR));
-        r.add("sm-crypto.paths[0]", () -> PATH);
-        r.add("sm-crypto.paths[1]", () -> "/orders/error");
+        r.add("sm-crypto.exclude-paths[0]", () -> "/plain");
+        r.add("sm-crypto.exclude-paths[1]", () -> "/marked-excluded");
         r.add("sm-crypto.max-body-bytes", () -> "4096");
     }
 
@@ -111,6 +115,48 @@ class StarterIntegrationTest {
     @Test void unrelatedPlainJsonEndpointRemainsPlain() throws Exception {
         send("/plain", "{\"name\":\"still-plain\"}").andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("still-plain"));
+    }
+
+    @Test void unannotatedPostIsEncryptedUnlessExactPathIsExcluded() throws Exception {
+        send("/plain/child", "{\"name\":\"not-encrypted\"}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_ENCRYPTED_REQUEST"));
+        Packet packet = make("/plain/child", System.currentTimeMillis(), "{\"name\":\"encrypted-only\"}");
+        assertEquals("encrypted-only", open(packet, send("/plain/child", packet.wire())
+                .andExpect(status().isOk()).andReturn()).path("name").asText());
+        mvc.perform(post("/plain/child").contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .content("name=not-encrypted")).andExpect(status().isBadRequest());
+    }
+
+    @Test void nonPostMethodsAreUnaffectedEvenAtMarkedController() throws Exception {
+        mvc.perform(get("/marked-methods")).andExpect(status().isOk()).andExpect(jsonPath("$.name").value("GET"));
+        mvc.perform(put("/marked-methods")).andExpect(status().isOk()).andExpect(jsonPath("$.name").value("PUT"));
+        mvc.perform(options("/marked-methods")).andExpect(status().isOk());
+    }
+
+    @Test void excludedMarkedPostReportsConfigurationConflict() throws Exception {
+        send("/marked-excluded", "{\"name\":\"plaintext\"}").andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("ENCRYPTED_ENDPOINT_CONFIG_CONFLICT"));
+    }
+
+    @Test void forwardedDispatchCannotReachUnannotatedProtectedPost() throws Exception {
+        mvc.perform(post("/plain/child").with(request -> {
+            request.setDispatcherType(DispatcherType.FORWARD);
+            request.setAttribute(RequestDispatcher.FORWARD_REQUEST_URI, "/plain");
+            return request;
+        }).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"plaintext\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_ENCRYPTED_REQUEST"));
+    }
+
+    @Test void oldPathsConfigurationFailsWithMigrationHint() {
+        new WebApplicationContextRunner().withUserConfiguration(TestApp.class)
+                .withPropertyValues("sm-crypto.enabled=true", "sm-crypto.active-kid=" + KID,
+                        "sm-crypto.private-keys." + KID + "=" + encode(SCALAR), "sm-crypto.paths[0]=/old")
+                .run(context -> {
+                    Throwable failure = context.getStartupFailure();
+                    assertNotNull(failure);
+                    while (failure.getCause() != null) { failure = failure.getCause(); }
+                    assertTrue(failure.getMessage().contains("sm-crypto.exclude-paths"));
+                });
     }
 
     @Test void changedTagIsRejectedWithoutConsumingRequestId() throws Exception {
@@ -243,7 +289,7 @@ class StarterIntegrationTest {
 
     @Configuration
     @EnableAutoConfiguration
-    @Import(Orders.class)
+    @Import({Orders.class, MarkedMethods.class})
     static class TestApp {}
 
     @RestController
@@ -258,7 +304,18 @@ class StarterIntegrationTest {
             return ResponseEntity.unprocessableEntity().body(java.util.Collections.singletonMap("code", "invalid-order"));
         }
 
-        @PostMapping("/plain")
+        @PostMapping({"/plain", "/plain/child"})
         Map<String,String> plain(@RequestBody Map<String,String> body) { return body; }
+    }
+
+    @RestController
+    @EncryptedApi
+    static class MarkedMethods {
+        @GetMapping("/marked-methods")
+        Map<String,String> get() { return java.util.Collections.singletonMap("name", "GET"); }
+        @PutMapping("/marked-methods")
+        Map<String,String> put() { return java.util.Collections.singletonMap("name", "PUT"); }
+        @PostMapping("/marked-excluded")
+        Map<String,String> excluded(@RequestBody Map<String,String> body) { return body; }
     }
 }

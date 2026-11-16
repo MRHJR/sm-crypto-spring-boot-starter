@@ -15,12 +15,8 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.regex.Pattern;
 import javax.servlet.DispatcherType;
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
@@ -31,29 +27,21 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 final class CryptoFilter extends OncePerRequestFilter {
     private static final String VERIFIED = CryptoFilter.class.getName() + ".verified";
-    private static final Pattern CANONICAL_PATH = Pattern.compile("/[A-Za-z0-9/_~.-]{1,1023}");
     private static final ObjectMapper WIRE = new ObjectMapper()
             .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
     private static final byte[] INTERNAL_ERROR = "{\"code\":\"ENCRYPTED_ENDPOINT_ERROR\"}".getBytes(StandardCharsets.US_ASCII);
     private static final byte[] HTTP_ERROR = "{\"code\":\"HTTP_ERROR\"}".getBytes(StandardCharsets.US_ASCII);
-    private final Set<String> paths;
+    private final PostPolicy policy;
     private final KeyRing keys;
     private final ReplayStore replay;
     private final long skew;
     private final int limit;
     private final SecureRandom random = new SecureRandom();
 
-    CryptoFilter(CryptoProperties config, KeyRing keys, ReplayStore replay) {
+    CryptoFilter(CryptoProperties config, PostPolicy policy, KeyRing keys, ReplayStore replay) {
         this.keys = keys;
         this.replay = replay;
-        List<String> configured = config.getPaths();
-        if (configured == null || configured.isEmpty() || configured.stream().anyMatch(p -> !validPath(p))) {
-            throw new IllegalArgumentException("sm-crypto.paths must contain canonical, exact request URIs");
-        }
-        this.paths = Collections.unmodifiableSet(new HashSet<>(configured));
-        if (this.paths.stream().anyMatch(p -> p.endsWith("/crypto/public-key"))) {
-            throw new IllegalArgumentException("Do not require envelope encryption on the public-key endpoint");
-        }
+        this.policy = policy;
         this.limit = config.getMaxBodyBytes();
         if (limit < 1024 || limit > 8 * 1024 * 1024) {
             throw new IllegalArgumentException("sm-crypto.max-body-bytes must be in [1024, 8388608]");
@@ -66,16 +54,6 @@ final class CryptoFilter extends OncePerRequestFilter {
         this.skew = window.toMillis();
     }
 
-    private static boolean validPath(String path) {
-        if (path == null || !CANONICAL_PATH.matcher(path).matches() || path.endsWith("/") || path.contains("//")) {
-            return false;
-        }
-        for (String segment : path.split("/")) {
-            if (".".equals(segment) || "..".equals(segment)) { return false; }
-        }
-        return true;
-    }
-
     static boolean isVerified(HttpServletRequest request) {
         Object marker = request.getAttribute(VERIFIED);
         return request.getDispatcherType() == DispatcherType.REQUEST && marker instanceof VerifiedRoute
@@ -85,13 +63,13 @@ final class CryptoFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         return request.getDispatcherType() != DispatcherType.REQUEST
-                || !paths.contains(request.getRequestURI()) || "OPTIONS".equals(request.getMethod());
+                || !policy.requiresEncryption(request.getMethod(), request.getRequestURI());
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws IOException {
-        if (!"POST".equals(request.getMethod()) || request.getQueryString() != null
+        if (!PostPolicy.validExactPath(request.getRequestURI()) || request.getQueryString() != null
                 || !isJson(request.getContentType()) || request.getHeader("Content-Encoding") != null) {
             writeProtocolError(response, 400, "INVALID_ENCRYPTED_REQUEST");
             return;

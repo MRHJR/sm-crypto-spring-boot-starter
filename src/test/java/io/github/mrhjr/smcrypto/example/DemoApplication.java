@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,26 +27,32 @@ public class DemoApplication {
         params.put("server.address", "127.0.0.1");
         params.put("server.port", "18080");
         params.put("sm-crypto.enabled", true);
+        params.put("sm-crypto.exclude-paths[0]", "/demo/plain");
         params.put("sm-crypto.active-kid", "local-demo");
         params.put("sm-crypto.private-keys.local-demo", key);
-        params.put("sm-crypto.paths[0]", "/demo/echo");
-        params.put("sm-crypto.paths[1]", "/demo/reject");
         SpringApplication app = new SpringApplication(DemoApplication.class);
         app.setDefaultProperties(params);
         app.run(args);
     }
 
     @RestController
-    @EncryptedApi
     public static class Echo {
+        @EncryptedApi
         @PostMapping("/demo/echo")
         public Map<String, String> echo(@RequestBody Map<String, String> body) {
             return body;
         }
 
+        @EncryptedApi
         @PostMapping("/demo/reject")
         public ResponseEntity<Map<String, String>> reject(@RequestBody Map<String, String> body) {
             return ResponseEntity.unprocessableEntity().body(body);
         }
+
+        @PostMapping("/demo/plain")
+        public Map<String, String> plain(@RequestBody Map<String, String> body) { return body; }
+
+        @GetMapping("/demo/plain")
+        public Map<String, String> plainGet() { return java.util.Collections.singletonMap("message", "plain GET"); }
     }
 }

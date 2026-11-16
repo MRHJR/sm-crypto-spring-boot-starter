@@ -12,7 +12,8 @@ public class CryptoProperties {
     private boolean enabled;
     private String activeKid;
     private Map<String, String> privateKeys = new LinkedHashMap<>();
-    private List<String> paths = new ArrayList<>();
+    private List<String> paths;
+    private List<String> excludePaths = new ArrayList<>();
     private Duration clockSkew = Duration.ofMinutes(2);
     private int maxBodyBytes = 1024 * 1024;
     private int replayCapacity = 10_000;
@@ -23,8 +24,12 @@ public class CryptoProperties {
     public void setActiveKid(String activeKid) { this.activeKid = activeKid; }
     public Map<String, String> getPrivateKeys() { return privateKeys; }
     public void setPrivateKeys(Map<String, String> privateKeys) { this.privateKeys = privateKeys; }
+    @org.springframework.boot.context.properties.DeprecatedConfigurationProperty(
+            reason = "POST is now protected by default; exclude only intentionally plaintext routes")
     public List<String> getPaths() { return paths; }
     public void setPaths(List<String> paths) { this.paths = paths; }
+    public List<String> getExcludePaths() { return excludePaths; }
+    public void setExcludePaths(List<String> excludePaths) { this.excludePaths = excludePaths; }
     public Duration getClockSkew() { return clockSkew; }
     public void setClockSkew(Duration clockSkew) { this.clockSkew = clockSkew; }
     public int getMaxBodyBytes() { return maxBodyBytes; }

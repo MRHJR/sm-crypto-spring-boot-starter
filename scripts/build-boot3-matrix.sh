@@ -7,7 +7,7 @@ repo_args=()
 if [[ -n "${MAVEN_LOCAL_REPO:-}" ]]; then
   repo_args+=("-Dmaven.repo.local=${MAVEN_LOCAL_REPO}")
 fi
-version=0.1.0
+version=0.2.0
 artifact=sm-crypto-spring-boot3-starter
 mkdir -p dist/boot3
 for v in 17 21; do
@@ -24,4 +24,4 @@ for v in 17 21; do
     "${repo_args[@]}" -B -ntp -f boot3/pom.xml "-Dmaven.compiler.release=$v" clean verify
   cp "boot3/target/$artifact-$version.jar" "dist/boot3/$artifact-$version-jdk$v.jar"
 done
-(cd dist/boot3 && sha256sum "$artifact-$version"-jdk*.jar > SHA256SUMS)
+(cd dist/boot3 && sha256sum "$artifact"-*-jdk*.jar > SHA256SUMS)

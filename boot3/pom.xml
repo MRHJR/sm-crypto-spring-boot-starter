@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.mrhjr</groupId>
   <artifactId>sm-crypto-spring-boot3-starter</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <name>SM crypto Spring Boot 3 Starter</name>
   <description>Opt-in SM2 and SM4-GCM JSON envelope for Spring MVC (Jakarta Servlet)</description>
   <properties>

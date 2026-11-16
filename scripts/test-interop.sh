@@ -43,4 +43,17 @@ const client = createCryptoClient({ origin: 'http://127.0.0.1:18080', allowInsec
 const body = { message: '验证加密业务错误' };
 assert.deepEqual(await client.post('/demo/reject', body), { status: 422, ok: false, data: body });
 console.log('Authenticated non-2xx business response: OK');
+
+const origin = 'http://127.0.0.1:18080';
+const plaintextPost = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+const protectedPost = await fetch(origin + '/demo/echo', plaintextPost);
+assert.equal(protectedPost.status, 400);
+const excludedPost = await fetch(origin + '/demo/plain', plaintextPost);
+assert.equal(excludedPost.status, 200);
+assert.deepEqual(await excludedPost.json(), body);
+const ordinaryGet = await fetch(origin + '/demo/plain');
+assert.equal(ordinaryGet.status, 200);
+const getBody = await ordinaryGet.json();
+assert.ok(!('ciphertext' in getBody));
+console.log('Default POST protection, plaintext exemption, and unchanged GET: OK');
 JS

@@ -81,7 +81,7 @@ test('rejects insecure non-loopback origins, query strings and cross-origin path
   assert.throws(() => sdk.createCryptoClient({ origin: 'http://api.example.test', fetchImpl }));
   const client = sdk.createCryptoClient({ origin: 'https://api.example.test', fetchImpl });
   for (const path of ['/demo/echo?x=1', '//other.example.test/api', '/a/../demo/echo', '/demo/echo#x',
-    '/demo//echo', '/demo/echo/', '/demo/%65cho', '/demo/echo;foo', '/', '/' + 'a'.repeat(1024)]) {
+    '/demo//echo', '/demo/echo/', '/demo/%65cho', '/demo/echo;foo', '/' + 'a'.repeat(1024)]) {
     await assert.rejects(client.post(path, {}), TypeError);
   }
 });
@@ -93,4 +93,12 @@ test('exposes authenticated business errors and preserves existing authenticatio
     { status: 422, ok: false, data: { code: 'BUSINESS_ERROR' } });
   assert.equal(calls[1].options.headers.get('Authorization'), 'Bearer test-only');
   assert.equal(calls[0].options.credentials, 'omit');
+});
+
+test('supports an encrypted POST on the canonical root path', async () => {
+  const { fetchImpl, calls } = mockServer((request) => request);
+  const client = sdk.createCryptoClient({ origin: 'https://api.example.test', fetchImpl });
+  const payload = { message: 'root' };
+  assert.deepEqual(await client.post('/', payload), { status: 200, ok: true, data: payload });
+  assert.equal(calls[1].url.pathname, '/');
 });

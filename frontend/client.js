@@ -50,8 +50,8 @@ function fromHex(string) {
 }
 
 function checkedPath(path, origin) {
-  if (typeof path !== 'string' || path.length > 1024 || !/^\/[A-Za-z0-9/_~.-]+$/.test(path) ||
-    path.includes('//') || path.endsWith('/') || path.split('/').some(part => part === '.' || part === '..')) {
+  if (typeof path !== 'string' || path.length > 1024 || !/^\/[A-Za-z0-9/_~.-]*$/.test(path) ||
+    path.includes('//') || (path !== '/' && path.endsWith('/')) || path.split('/').some(part => part === '.' || part === '..')) {
     throw new TypeError('Use an absolute path without a query or a fragment');
   }
   const url = new URL(path, origin);

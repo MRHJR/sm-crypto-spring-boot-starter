@@ -1,10 +1,10 @@
 # SM Crypto Spring Boot Starter
 
-在指定的 Spring MVC JSON POST 接口上启用 SM2 + SM4-GCM 应用层加密。SM2 只用于封装临时密钥，SM4-GCM 用于验证并加解密请求体和响应体。**仍须使用 HTTPS 和原有登录鉴权**。这不是 TLS 的替代品，也不能阻止浏览器使用者看到自己的明文。
+为 Spring MVC 的 POST 接口提供 SM2 + SM4-GCM 应用层加密。SM2 只用于封装临时密钥，SM4-GCM 用于验证并加解密请求体和响应体。**仍须使用 HTTPS 和原有登录鉴权**。这不是 TLS 的替代品，也不能阻止浏览器使用者看到自己的明文。
 
 ## 下载和安装
 
-先按宿主项目的 **Spring Boot 大版本**选 Starter，再按运行 **JDK** 选 JAR。两种 Starter 不要同时引入。同一个 Starter 的不同 JDK 构建共享 Maven 坐标，只安装与你运行时匹配的一个。
+当前版本是 **0.2.0**，旧的 0.1.0 JAR 仍留在原目录。先按宿主项目的 **Spring Boot 大版本**选 Starter，再按运行 **JDK** 选 JAR。两种 Starter 不要同时引入。同一个 Starter 的不同 JDK 构建共享 Maven 坐标，只安装与你运行时匹配的一个。
 
 | 宿主 Spring Boot | 可下载 JDK | 下载 | Maven artifactId |
 |---|---|---|---|
@@ -15,10 +15,10 @@
 
 ```sh
 # Spring Boot 2 项目：
-mvn install:install-file -Dfile=dist/boot2/sm-crypto-spring-boot-starter-0.1.0-jdk17.jar -DpomFile=pom.xml
+mvn install:install-file -Dfile=dist/boot2/sm-crypto-spring-boot-starter-0.2.0-jdk17.jar -DpomFile=pom.xml
 
 # Spring Boot 3 项目：
-mvn install:install-file -Dfile=dist/boot3/sm-crypto-spring-boot3-starter-0.1.0-jdk17.jar -DpomFile=boot3/pom.xml
+mvn install:install-file -Dfile=dist/boot3/sm-crypto-spring-boot3-starter-0.2.0-jdk17.jar -DpomFile=boot3/pom.xml
 ```
 
 在宿主项目中使用相应的 artifactId。例如 Boot 3：
@@ -27,7 +27,7 @@ mvn install:install-file -Dfile=dist/boot3/sm-crypto-spring-boot3-starter-0.1.0-
 <dependency>
   <groupId>io.github.mrhjr</groupId>
   <artifactId>sm-crypto-spring-boot3-starter</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 
@@ -35,7 +35,15 @@ mvn install:install-file -Dfile=dist/boot3/sm-crypto-spring-boot3-starter-0.1.0-
 
 ## 后端接入
 
-用已有的密钥管理流程生成 SM2 密钥对，配置后端私钥标量（32 字节、无填充 Base64URL）；不要提交生产私钥，不要让 Actuator 的 env/configprops 或配置诊断暴露密钥。不同应用和环境使用不同 SM2 密钥对。公开的 SM2 公钥由后端从私钥推导。配置示例：
+默认关闭。**设为 `sm-crypto.enabled: true` 后，所有经过本 Starter 的 Spring MVC POST 默认要求加密 JSON，只有免加密白名单 `exclude-paths` 里的 POST 继续走原来的明文请求和响应。** 不需要再为要加密的接口加注解或逐个列路径。
+
+| 请求 | 启用后的行为 |
+|---|---|
+| POST，未列入白名单 | 要求加密 JSON 报文，明文或不支持的报文格式会被拒绝 |
+| POST，列入白名单 | Starter 不处理加解密；原来的身份认证、权限校验等不受影响 |
+| GET、HEAD、PUT、PATCH、DELETE、OPTIONS 等 | 不参与加解密，正常处理；`GET /crypto/public-key` 不需加入白名单 |
+
+只支持 **POST JSON** 加密。上传、表单或其他不能走加密 JSON 的 POST 如果要继续使用，必须明确列入白名单。不要在加密过滤器前启用将 POST 改写为 PUT/PATCH/DELETE 的 HTTP 方法覆盖功能（例如 `HiddenHttpMethodFilter`）。白名单按完整原始路径精确匹配，有 context path 时要写进去；不支持通配符、查询串或尾斜杠（根路径 `/` 除外）。前端 SDK 使用未经转义的规范路径，不支持以 URL 参数传递待加密数据。例如：
 
 ```yaml
 sm-crypto:
@@ -43,20 +51,26 @@ sm-crypto:
   active-kid: key-1
   private-keys:
     key-1: ${SM_CRYPTO_KEY_1}
-  paths:
-    - /api/echo
+  exclude-paths:
+    - /api/public/search
+    - /api/files/upload
   clock-skew: 2m
   max-body-bytes: 1048576
   replay-capacity: 10000
 ```
 
-路径必须是加密过滤器看到的完整原始路径（包含 context path，如果配置了），且不带 query；不支持加密路由内部 forward。默认请求上限是整个加密信封的 1 MiB，实际可用 JSON 体积因 Base64URL 编码与信封开销而更小。不应部署在会把同一个加密 Controller 映射到未保护别名的配置中；推荐同时标记 `@EncryptedApi`。Controller 仍然收发普通 JSON DTO，不需要自己处理密钥。公钥端点 `GET /crypto/public-key` 默认返回 `kid` 和 `publicKey`；按需在现有安全配置中放行此端点，不放行受保护的业务端点。
+`enabled` 和白名单在启动时读取，改配置后须重启。受保护的 Controller 仍然收发普通 JSON DTO，默认请求上限是整个加密信封的 1 MiB；因 Base64URL 和信封开销，可用 JSON 体积会更小。前端取公钥不携带登录凭据，宿主的 Spring Security 应允许访问准确的 `GET /crypto/public-key`，不要因此放行业务接口。有 context path 或 MVC 路径前缀时，在 SDK 的 `publicKeyPath` 填写完整公钥路径。若请求在更早的安全过滤器里就已处理，不会进入 Starter。
+
+- **升级 0.1.0 → 0.2.0**：删除旧的 `sm-crypto.paths` 配置，再明确列出仍需走明文的 POST；启用时若仍配置旧项，应用会提示迁移而不是静默扩大范围。上线前确认所有应加密的 POST 调用方已接入 SDK。
+- **`@EncryptedApi`**：非必需。如果 POST 仍标有这个注解，关掉总开关时该接口仍拒绝明文；如果又把它列入免加密白名单，则视作配置冲突并拒绝请求。需要豁免时，先去掉对应的标记。
+
+后端私钥标量必须来自可信的密钥管理流程（32 字节、无填充 Base64URL）。不要提交生产私钥，不要让 Actuator 的 env/configprops 或配置诊断暴露密钥。不同应用和环境使用不同 SM2 密钥对。公开的 SM2 公钥由后端从私钥推导。
 
 内置去重存储只适合单实例。上线多实例之前提供共享的 `ReplayStore` 实现，在整个窗口内对 ID 做原子占用；同时保留业务自己的幂等键和生产限流。切换 `active-kid` 时，为旧请求保留旧私钥到公钥缓存和在途请求窗口结束。若网关能替换前端代码、公钥或窃取明文登录凭据，不要把这套协议当成对该网关的完整防护。协议不提供应用层前向保密，长期 SM2 私钥泄露时，之前截获的密文可能被解开。
 
 ## 浏览器接入
 
-前端源码与测试在 [frontend](frontend)。使用打包器加载 SDK：
+前端源码与测试在 [frontend](frontend)。普通 GET 等请求和白名单内的明文 POST 继续用原有客户端；其他 POST 用此 SDK，不要遇到失败就回退到明文。使用打包器加载 SDK：
 
 ```js
 import { createCryptoClient } from './frontend/client.js';
@@ -98,10 +112,10 @@ npm --prefix frontend test
 
 | Spring Boot | 运行 JDK | Java 测试 |
 |---|---|---|
-| 2.7.18 | 8、11、17、21 | 每版 27 项通过 |
-| 2.6.3 | 8 | 27 项通过 |
-| 3.5.16 | 17、21 | 每版 28 项通过 |
+| 2.7.18 | 8、11、17、21 | 每版 32 项通过 |
+| 2.6.3 | 8 | 32 项通过 |
+| 3.5.16 | 17、21 | 每版 33 项通过 |
 
-前端 4 项单元测试通过。Boot 2 和 Boot 3 都跑过 Java 服务与 JavaScript 客户端的真实 HTTP 联调，覆盖双向加解密、篡改拒绝、防重放，以及加密返回 HTTP 422 业务错误。Boot 3 的实测框架版本是 3.5.16，不代表已经验证所有 3.x 小版本。
+前端 5 项单元测试通过。Boot 2 和 Boot 3 都跑过 Java 服务与 JavaScript 客户端的真实 HTTP 联调，覆盖双向加解密、篡改拒绝、防重放、加密返回 HTTP 422 业务错误，以及默认 POST 拒绝明文、白名单 POST 放行、普通 GET 不受影响。Boot 3 的实测框架版本是 3.5.16，不代表已经验证所有 3.x 小版本。
 
 Boot 3 模块通过 Maven 从同一份 Java 源码生成 Jakarta Servlet 版本，并使用自己的自动配置注册文件。`boot3/target` 是生成目录；修改通用协议、过滤器和测试时请改仓库根目录的源码，不要修改这个生成目录。
